@@ -52,6 +52,9 @@ layer name. The opacity must be between 0 and 1. Example:
     parser.add_option("-i", "--imageexport",
             action="store_true", dest="imageexport", default=False,
             help="Use PNG files as export content")
+    parser.add_option("-d", "--dontjoin",
+            action="store_false", dest="joinslides", default=True,
+            help="Do not join individual slides into multipage file. Useful for e.g. beamer <multiinclude>")
     (options, args) = parser.parse_args()
     try:
         FILENAME = args[0]
@@ -151,14 +154,16 @@ layer name. The opacity must be between 0 and 1. Example:
                 if opacity:
                     set_style(l, 'opacity', str(opacity))
             #print l.attrib['style']
+        #strip extension
+        fname = FILENAME.split('.')[0]
         svgslide = os.path.abspath(os.path.join(os.curdir,
-                                                "%s.p%d.svg" % (FILENAME, i)))
+                                                "%s.p%d.svg" % (fname, i)))
         pdfslide = os.path.abspath(os.path.join(os.curdir,
-                                                "%s.p%d.pdf" % (FILENAME, i)))
+                                                "%s-%d.pdf" % (fname, i)))
         # Use the correct extension if using images
         if options.imageexport:
             pdfslide = os.path.abspath(os.path.join(os.curdir,
-                    ".inkscapeslide_%s.p%05d.png" % (FILENAME, i)))
+                    ".inkscapeslide_%s-%05d.png" % (FILENAME, i)))
 
         # Write the XML to file, "wireframes.p1.svg"
         f = open(svgslide, 'w')
@@ -178,75 +183,76 @@ layer name. The opacity must be between 0 and 1. Example:
 
         print "Generated page %d." % (i + 1)
 
-    joinedpdf = False
-    outputFilename = "%s.pdf" % FILENAME.split(".svg")[0]
-    outputDir = os.path.dirname(outputFilename)
-    print "Output file %s" % outputFilename
+    if options.joinslides:
+        joinedpdf = False
+        outputFilename = "%s.pdf" % FILENAME.split(".svg")[0]
+        outputDir = os.path.dirname(outputFilename)
+        print "Output file %s" % outputFilename
 
-    if options.imageexport:
-        # Use ImageMagick to combine the PNG files into a PDF
-        if not os.system('which convert > /dev/null'):
-            print "Using 'convert' to join PNG's"
-            pngPath = os.path.join(outputDir, ".inkscapeslide_*.png")
-            proc = subprocess.Popen(
-                    "convert %s -resample 180 %s" % (pngPath, outputFilename),
-                    shell=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE)
-            # See if the command succeeded
-            stdout_value, stderr_value = proc.communicate()
-            if proc.returncode:
-                print "\nERROR: convert command failed:"
-                print stderr_value
+        if options.imageexport:
+            # Use ImageMagick to combine the PNG files into a PDF
+            if not os.system('which convert > /dev/null'):
+                print "Using 'convert' to join PNG's"
+                pngPath = os.path.join(outputDir, ".inkscapeslide_*.png")
+                proc = subprocess.Popen(
+                        "convert %s -resample 180 %s" % (pngPath, outputFilename),
+                        shell=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE)
+                # See if the command succeeded
+                stdout_value, stderr_value = proc.communicate()
+                if proc.returncode:
+                    print "\nERROR: convert command failed:"
+                    print stderr_value
+                else:
+                    joinedpdf = True
             else:
+                print "Please install ImageMagick to provide the 'convert' utility"
+        else:
+            # Join PDFs
+            has_pyPdf = False
+            try:
+                import pyPdf
+                has_pyPdf = True
+            except:
+                pass
+
+            if has_pyPdf:
+                print "Using 'pyPdf' to join PDFs"
+                output = pyPdf.PdfFileWriter()
+                inputfiles = []
+                for slide in pdfslides:
+                    inputstream = file(slide, "rb")
+                    inputfiles.append(inputstream)
+                    input = pyPdf.PdfFileReader(inputstream)
+                    output.addPage(input.getPage(0))
+                outputStream = file(outputFilename, "wb")
+                output.write(outputStream)
+                outputStream.close()
+                for f in inputfiles:
+                    f.close()
                 joinedpdf = True
-        else:
-            print "Please install ImageMagick to provide the 'convert' utility"
-    else:
-        # Join PDFs
-        has_pyPdf = False
-        try:
-            import pyPdf
-            has_pyPdf = True
-        except:
-            pass
 
-        if has_pyPdf:
-            print "Using 'pyPdf' to join PDFs"
-            output = pyPdf.PdfFileWriter()
-            inputfiles = []
-            for slide in pdfslides:
-                inputstream = file(slide, "rb")
-                inputfiles.append(inputstream)
-                input = pyPdf.PdfFileReader(inputstream)
-                output.addPage(input.getPage(0))
-            outputStream = file(outputFilename, "wb")
-            output.write(outputStream)
-            outputStream.close()
-            for f in inputfiles:
-                f.close()
-            joinedpdf = True
+            # Verify pdfjoin exists in PATH
+            elif not os.system('which pdfjoin > /dev/null'):
+                # In the end, run: pdfjoin wireframes.p*.pdf -o Wireframes.pdf
+                print "Using 'pdfsam' to join PDFs"
+                os.system("pdfjoin --outfile %s.pdf %s" %
+                        (FILENAME.split(".svg")[0], " ".join(pdfslides)))
+                joinedpdf = True
 
-        # Verify pdfjoin exists in PATH
-        elif not os.system('which pdfjoin > /dev/null'):
-            # In the end, run: pdfjoin wireframes.p*.pdf -o Wireframes.pdf
-            print "Using 'pdfsam' to join PDFs"
-            os.system("pdfjoin --outfile %s.pdf %s" %
-                    (FILENAME.split(".svg")[0], " ".join(pdfslides)))
-            joinedpdf = True
+            # Verify pdftk exists in PATH
+            elif not os.system('which pdftk > /dev/null'):
+                # run: pdftk in1.pdf in2.pdf cat output Wireframes.pdf
+                print "Using 'pdftk' to join PDFs"
+                os.system("pdftk %s cat output %s.pdf" % (" ".join(pdfslides),
+                        FILENAME.split(".svg")[0]))
+                joinedpdf = True
+            else:
+                print "Please install pdfjam, pdftk or install the 'pyPdf'" \
+                        "python package, to join PDFs."
 
-        # Verify pdftk exists in PATH
-        elif not os.system('which pdftk > /dev/null'):
-            # run: pdftk in1.pdf in2.pdf cat output Wireframes.pdf
-            print "Using 'pdftk' to join PDFs"
-            os.system("pdftk %s cat output %s.pdf" % (" ".join(pdfslides),
-                    FILENAME.split(".svg")[0]))
-            joinedpdf = True
-        else:
-            print "Please install pdfjam, pdftk or install the 'pyPdf'" \
-                    "python package, to join PDFs."
-
-    # Clean up
-    if joinedpdf:
-        for pdfslide in pdfslides:
-            os.unlink(pdfslide)
+        # Clean up
+        if joinedpdf:
+            for pdfslide in pdfslides:
+                os.unlink(pdfslide)
