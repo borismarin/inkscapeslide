@@ -154,6 +154,7 @@ layer name. The opacity must be between 0 and 1. Example:
                 if opacity:
                     set_style(l, 'opacity', str(opacity))
             #print l.attrib['style']
+
         #strip extension
         fname = FILENAME.split('.')[0]
         svgslide = os.path.abspath(os.path.join(os.curdir,
@@ -163,7 +164,7 @@ layer name. The opacity must be between 0 and 1. Example:
         # Use the correct extension if using images
         if options.imageexport:
             pdfslide = os.path.abspath(os.path.join(os.curdir,
-                    ".inkscapeslide_%s-%05d.png" % (FILENAME, i)))
+                    ".inkscapeslide_%s-%05d.png" % (fname, i)))
 
         # Write the XML to file, "wireframes.p1.svg"
         f = open(svgslide, 'w')
@@ -185,7 +186,7 @@ layer name. The opacity must be between 0 and 1. Example:
 
     if options.joinslides:
         joinedpdf = False
-        outputFilename = "%s.pdf" % FILENAME.split(".svg")[0]
+        outputFilename = "%s.pdf" % fname
         outputDir = os.path.dirname(outputFilename)
         print "Output file %s" % outputFilename
 
@@ -238,7 +239,7 @@ layer name. The opacity must be between 0 and 1. Example:
                 # In the end, run: pdfjoin wireframes.p*.pdf -o Wireframes.pdf
                 print "Using 'pdfsam' to join PDFs"
                 os.system("pdfjoin --outfile %s.pdf %s" %
-                        (FILENAME.split(".svg")[0], " ".join(pdfslides)))
+                        (fname, " ".join(pdfslides)))
                 joinedpdf = True
 
             # Verify pdftk exists in PATH
@@ -246,7 +247,7 @@ layer name. The opacity must be between 0 and 1. Example:
                 # run: pdftk in1.pdf in2.pdf cat output Wireframes.pdf
                 print "Using 'pdftk' to join PDFs"
                 os.system("pdftk %s cat output %s.pdf" % (" ".join(pdfslides),
-                        FILENAME.split(".svg")[0]))
+                        fname))
                 joinedpdf = True
             else:
                 print "Please install pdfjam, pdftk or install the 'pyPdf'" \
